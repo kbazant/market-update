@@ -5,6 +5,7 @@ from azure.data.tables import TableServiceClient
 from azure.core.exceptions import ResourceExistsError
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+import requests  # For Turnstile verification
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Required for flash messages
@@ -19,6 +20,10 @@ secret_client = SecretClient(vault_url=KV_URI, credential=credential)
 
 # Retrieve the Azure Storage connection string from Key Vault
 AZURE_CONNECTION_STRING = secret_client.get_secret("marketupdate-storage-emails").value
+
+# Retrieve Turnstile secrets from Key Vault
+TURNSTILE_SITE_KEY = secret_client.get_secret("turnstile-site-key").value  # Replace with your Key Vault secret name
+TURNSTILE_SECRET_KEY = secret_client.get_secret("turnstile-secret-key").value  # Replace with your Key Vault secret name
 
 # Azure Table Storage configuration
 TABLE_NAME = "EmailSubscriptions"
@@ -35,7 +40,18 @@ except ResourceExistsError:
 def index():
     if request.method == 'POST':
         email = request.form.get('email')
-        if email:
+        turnstile_response = request.form.get('cf-turnstile-response')
+
+        # Verify Turnstile response
+        verify_url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+        data = {
+            'secret': TURNSTILE_SECRET_KEY,
+            'response': turnstile_response,
+        }
+        response = requests.post(verify_url, data=data)
+        result = response.json()
+
+        if result.get('success') and email:
             # Save email to Azure Table Storage
             table_client = table_service.get_table_client(TABLE_NAME)
             entity = {
@@ -49,9 +65,9 @@ def index():
             except ResourceExistsError:
                 flash('This email is already subscribed.', 'warning')
         else:
-            flash('Please provide a valid email address.', 'danger')
+            flash('CAPTCHA verification failed or invalid email address.', 'danger')
 
-    return render_template('index.html')
+    return render_template('index.html', site_key=TURNSTILE_SITE_KEY)
 
 
 @app.route('/favicon.ico')
@@ -63,29 +79,6 @@ def favicon():
 @app.route('/thank-you')
 def thank_you():
     return render_template('thank-you.html')
-
-
-@app.route('/signup', methods=['GET', 'POST'])
-def signup():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        if email:
-            # Save email to Azure Table Storage
-            table_client = table_service.get_table_client(TABLE_NAME)
-            entity = {
-                'PartitionKey': 'Subscription',
-                'RowKey': email,
-            }
-            try:
-                table_client.create_entity(entity)
-                flash('Thank you for signing up!', 'success')
-                return redirect(url_for('thank_you'))  # Redirect to the thank-you page
-            except ResourceExistsError:
-                flash('This email is already subscribed.', 'warning')
-        else:
-            flash('Please provide a valid email address.', 'danger')
-
-    return render_template('signup.html')
 
 
 if __name__ == '__main__':
