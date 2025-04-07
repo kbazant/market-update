@@ -45,7 +45,7 @@ def index():
             try:
                 table_client.create_entity(entity)
                 flash('Thank you for signing up!', 'success')
-                return redirect(url_for('hello'))  # Redirect to the thank-you page
+                return redirect(url_for('thank_you'))  # Redirect to the thank-you page
             except ResourceExistsError:
                 flash('This email is already subscribed.', 'warning')
         else:
@@ -60,9 +60,9 @@ def favicon():
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 
-@app.route('/hello')
-def hello():
-    return render_template('hello.html')
+@app.route('/thank-you')
+def thank_you():
+    return render_template('thank-you.html')
 
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -79,7 +79,7 @@ def signup():
             try:
                 table_client.create_entity(entity)
                 flash('Thank you for signing up!', 'success')
-                return redirect(url_for('hello'))  # Redirect to the thank-you page
+                return redirect(url_for('thank_you'))  # Redirect to the thank-you page
             except ResourceExistsError:
                 flash('This email is already subscribed.', 'warning')
         else:
